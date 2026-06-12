@@ -2,14 +2,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import os
+import requests
 import json
-from groq import Groq
 
 app = FastAPI()
 
-# =========================
-# CORS FIX (Wix compatibile)
-# =========================
+# CORS per Wix
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -18,30 +16,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# =========================
-# GROQ CLIENT
-# =========================
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+HF_TOKEN = os.getenv("HF_TOKEN")
 
-
-# =========================
-# INPUT
-# =========================
 class InputData(BaseModel):
     content: str
     mode: str = "text"
 
 
-# =========================
-# API ENDPOINT
-# =========================
 @app.post("/analyze")
 def analyze(data: InputData):
 
     prompt = f"""
 You are an AI Safety & Ethics Analyzer.
 
-Return ONLY valid JSON. No markdown. No explanations.
+Return ONLY valid JSON.
 
 Schema:
 {{
@@ -52,38 +40,35 @@ Schema:
   "improvements": []
 }}
 
-Analyze the input below:
+Analyze:
 
 TYPE: {data.mode}
+CONTENT: {data.content}
 
-CONTENT:
-{data.content}
-
-Evaluate:
-- privacy risks
-- bias risks
-- security risks
-- misuse potential
-- ethical concerns
-
-Be strict and consistent.
+Focus on:
+privacy, bias, security, misuse, ethics.
 """
 
     try:
-        response = client.chat.completions.create(
-            # ✅ FIX IMPORTANTE: modello aggiornato
-            model="llama3-8b-8192",
-
-            messages=[
-                {"role": "system", "content": "You are a strict AI safety evaluator that outputs ONLY valid JSON."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2
+        response = requests.post(
+            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
+            headers={
+                "Authorization": f"Bearer {HF_TOKEN}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "inputs": prompt,
+                "parameters": {
+                    "max_new_tokens": 400,
+                    "temperature": 0.2
+                }
+            }
         )
 
-        text = response.choices[0].message.content
+        result = response.json()
 
-        # 🔥 estrazione JSON robusta
+        text = result[0]["generated_text"]
+
         start = text.find("{")
         end = text.rfind("}") + 1
         cleaned = text[start:end]
