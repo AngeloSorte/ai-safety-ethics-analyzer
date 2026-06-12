@@ -1,13 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import os
 import requests
+import os
 import json
 
 app = FastAPI()
 
-# CORS per Wix
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,66 +15,82 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-HF_TOKEN = os.getenv("HF_TOKEN")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 
 class InputData(BaseModel):
     content: str
     mode: str = "text"
 
 
+@app.get("/")
+def home():
+    return {"status": "online"}
+
+
 @app.post("/analyze")
 def analyze(data: InputData):
 
     prompt = f"""
-You are an AI Safety & Ethics Analyzer.
+You are an AI Safety and Ethics Analyzer.
+
+Analyze the following content.
+
+Input type:
+{data.mode}
+
+Content:
+{data.content}
+
+Evaluate:
+
+- privacy risks
+- security risks
+- bias risks
+- misuse potential
+- transparency issues
 
 Return ONLY valid JSON.
 
-Schema:
 {{
-  "risk_level": "LOW | MEDIUM | HIGH",
-  "score": 0,
-  "summary": "",
-  "issues": [],
-  "improvements": []
+  "risk_level": "LOW",
+  "score": 25,
+  "summary": "Short explanation",
+  "issues": ["issue1", "issue2"],
+  "improvements": ["improvement1", "improvement2"]
 }}
-
-Analyze:
-
-TYPE: {data.mode}
-CONTENT: {data.content}
-
-Focus on:
-privacy, bias, security, misuse, ethics.
 """
 
     try:
+
         response = requests.post(
-            "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2",
-            headers={
-                "Authorization": f"Bearer {HF_TOKEN}",
-                "Content-Type": "application/json"
-            },
+            f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}",
             json={
-                "inputs": prompt,
-                "parameters": {
-                    "max_new_tokens": 400,
-                    "temperature": 0.2
-                }
-            }
+                "contents": [
+                    {
+                        "parts": [
+                            {
+                                "text": prompt
+                            }
+                        ]
+                    }
+                ]
+            },
+            timeout=60
         )
 
         result = response.json()
 
-        text = result[0]["generated_text"]
+        text = result["candidates"][0]["content"]["parts"][0]["text"]
 
-        start = text.find("{")
-        end = text.rfind("}") + 1
-        cleaned = text[start:end]
+        text = text.replace("```json", "")
+        text = text.replace("```", "")
+        text = text.strip()
 
-        return json.loads(cleaned)
+        return json.loads(text)
 
     except Exception as e:
+
         return {
             "risk_level": "ERROR",
             "score": 0,
