@@ -7,21 +7,25 @@ from groq import Groq
 
 app = FastAPI()
 
-# ✅ CORS FIX (OBBLIGATORIO per Wix)
+# =========================
+# CORS FIX (Wix compatibile)
+# =========================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # in produzione si può restringere
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# ✅ GROQ CLIENT
+# =========================
+# GROQ CLIENT
+# =========================
 client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 
 # =========================
-# INPUT MODEL
+# INPUT
 # =========================
 class InputData(BaseModel):
     content: str
@@ -37,7 +41,7 @@ def analyze(data: InputData):
     prompt = f"""
 You are an AI Safety & Ethics Analyzer.
 
-Return ONLY valid JSON. No markdown. No extra text.
+Return ONLY valid JSON. No markdown. No explanations.
 
 Schema:
 {{
@@ -48,7 +52,7 @@ Schema:
   "improvements": []
 }}
 
-Analyze the input below.
+Analyze the input below:
 
 TYPE: {data.mode}
 
@@ -57,19 +61,21 @@ CONTENT:
 
 Evaluate:
 - privacy risks
-- bias
+- bias risks
 - security risks
 - misuse potential
 - ethical concerns
 
-Be strict, consistent, and deterministic.
+Be strict and consistent.
 """
 
     try:
         response = client.chat.completions.create(
-            model="llama3-70b-8192",
+            # ✅ FIX IMPORTANTE: modello aggiornato
+            model="llama3-8b-8192",
+
             messages=[
-                {"role": "system", "content": "You are a strict AI safety evaluator that outputs only JSON."},
+                {"role": "system", "content": "You are a strict AI safety evaluator that outputs ONLY valid JSON."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2
@@ -77,7 +83,7 @@ Be strict, consistent, and deterministic.
 
         text = response.choices[0].message.content
 
-        # 🔥 JSON CLEANING (important per evitare crash)
+        # 🔥 estrazione JSON robusta
         start = text.find("{")
         end = text.rfind("}") + 1
         cleaned = text[start:end]
